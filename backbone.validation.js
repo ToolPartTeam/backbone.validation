@@ -5,6 +5,11 @@
 //
 // Documentation and full license availabe at:
 // http://github.com/thedersen/backbone.validation
+var isServer = (typeof require !== 'undefined');
+if (isServer) {
+  var Backbone = require('backbone'),
+  _ = require('underscore')._;
+}
 
 Backbone.Validation = (function(Backbone, _, undefined) {
     var defaultOptions = {
@@ -62,96 +67,42 @@ Backbone.Validation = (function(Backbone, _, undefined) {
     };
        
     return {
-        version: '0.4.0',
-
-        configure: function(options) {
-            _.extend(defaultOptions, options);
-        },
-        
-        bind: function(view, options) {
-            options = options || {};
-            var model = view.model,
-                forceUpdate = options.forceUpdate || defaultOptions.forceUpdate,
-                selector = options.selector || defaultOptions.selector,
-                validFn = options.valid || Backbone.Validation.callbacks.valid,
-                invalidFn = options.invalid || Backbone.Validation.callbacks.invalid,
-                isValid = _.isUndefined(model.validation) ? true : undefined;
-            
+        bind: function(model) {
+            /**
+             * Instead of a simple string we always return an array of error messages if validation fails
+             */
             model.validate = function(attrs) {
-                if(!attrs){
-                    return model.validate.call(model, _.extend(getValidatedAttrs(model), model.toJSON()));
-                }
-                
+              if (!model.validation) {
+                console.log('no validation found in model ', model);
+                return false;
+              }
+
                 var result = [],
                     invalidAttrs = [];
-                    isValid = true;
 
                 for (var changedAttr in attrs) {
                     var error = validateAttr(model, changedAttr, attrs[changedAttr]);
                     if (error) {
                         result.push(error);
                         invalidAttrs.push(changedAttr);
-                        isValid = false;
-                        invalidFn(view, changedAttr, error, selector);
-                    } else {
-                        validFn(view, changedAttr, selector);
                     }
                 }
 
-                if (isValid) {
-                    for (var validatedAttr in model.validation) {
-                        if (_.isUndefined(attrs[validatedAttr]) && validateAttr(model, validatedAttr, model.get(validatedAttr))) {
-                            isValid = false;
-                            break;
-                        }
-                    }
-                }
-                
-                _.defer(function() {
-                    model.trigger('validated', isValid, model, invalidAttrs);
-                    model.trigger('validated:' + (isValid ? 'valid' : 'invalid'), model, invalidAttrs);
-                });
-
-                if(forceUpdate) {
-                    return;
-                }
-                
-                if (result.length === 1) {
-                    return result[0];
-                }
-                if (result.length > 1) {
-                    return result;
-                }
+                return _.isEmpty(result) ? false : result;
             };
             
-            model.isValid = function(forceValidation) {
-                if(forceValidation) {
-                    this.validate();
-                }
-                return isValid;
-            };
         },
-
-        unbind: function(view) {
-            delete view.model.validate;
-            delete view.model.isValid;
-        }
     };
 } (Backbone, _));
 
-Backbone.Validation.callbacks = {
-    valid: function(view, attr, selector) {
-        view.$('[' + selector + '~=' + attr + ']')
-            .removeClass('invalid')
-            .removeAttr('data-error');
-    },
-
-    invalid: function(view, attr, error, selector) {
-        view.$('[' + selector + '~=' + attr + ']')
-            .addClass('invalid')
-            .attr('data-error', error);
-    }
-};
+Backbone.Validation.OldModel = Backbone.Model;
+Backbone.Validation.Model = Backbone.Model.extend({
+  initialize: function() {
+    Backbone.Validation.bind(this)
+    Backbone.Validation.OldModel.prototype.initialize.call(this);
+  }
+})
+Backbone.Model = Backbone.Validation.Model;
 
 Backbone.Validation.patterns = {
     digits: /^\d+$/,
